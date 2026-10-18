@@ -10,6 +10,11 @@
 
 المسارات: `/` `/login?role=client|business` `/business` `/services` `/book?id=…` `/bookings` `/اسم-النشاط`
 
+## GitHub Pages
+1. `npm run deploy` (يبني بمسار `/Slotify/` ويدفع `dist` إلى فرع `gh-pages`)
+2. Settings → Pages → Source: فرع `gh-pages`
+3. Firebase → Authentication → Settings → Authorized domains: أضف `lo-oxll.github.io`
+
 ## النشر (خطة Blaze مطلوبة للدوال)
 1. `npm run build`
 2. `firebase deploy` (قواعد Firestore + الدوال + الاستضافة)

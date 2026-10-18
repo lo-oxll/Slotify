@@ -40,7 +40,7 @@ function Profile({ uid }) {
   const [qr, setQr] = useState("");
 
   useEffect(() => { getDoc(doc(db, "businesses", uid)).then((s) => { setB(s.data()); setOld(s.data().slug || ""); }); }, [uid]);
-  const link = b?.slug && typeof window !== "undefined" ? `${location.origin}/${b.slug}` : "";
+  const link = b?.slug && typeof window !== "undefined" ? `${location.origin}${import.meta.env.BASE_URL}${b.slug}` : "";
   useEffect(() => { if (link && b.slug === old) QRCode.toDataURL(link, { width: 240, margin: 1 }).then(setQr); else setQr(""); }, [link, old, b?.slug]);
   if (!b) return null;
 

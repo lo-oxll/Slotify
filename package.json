@@ -8,6 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "deploy": "VITE_BASE=/Slotify/ vite build && cp dist/index.html dist/404.html && gh-pages -d dist",
     "test:rules": "npx firebase-tools emulators:exec --only firestore \"node --test rules.test.js\""
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@vitejs/plugin-react": "4.3.3",
     "autoprefixer": "10.4.20",
     "firebase": "10.14.1",
+    "gh-pages": "6.2.0",
     "postcss": "8.4.47",
     "qrcode": "1.5.4",
     "react": "18.3.1",
