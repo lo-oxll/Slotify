@@ -1,4 +1,4 @@
-// يجب أن يطابق functions/slots.js
+// منطق المواعيد (دوال نقية بلا اعتماديات)
 export const B = 15;
 const m = (t) => { const [h, mm] = t.split(":").map(Number); return h * 60 + mm; };
 const hm = (n) => `${String(Math.floor(n / 60)).padStart(2, "0")}:${String(n % 60).padStart(2, "0")}`;
@@ -8,6 +8,7 @@ export const blocksOf = (time, dur) => {
   const n = Math.ceil(dur / B), s = m(time);
   return Array.from({ length: n }, (_, i) => hm(s + i * B));
 };
+export const busyDocId = (biz, staff, date, time) => `${biz}_${staff}_${date}_${time}`;
 
 export function candidateTimes(biz, dur, date) {
   const dow = new Date(`${date}T00:00:00`).getDay();

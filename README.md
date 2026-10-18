@@ -1,28 +1,20 @@
-# وقتي
+# وقتي — HTML + CSS + JS فقط
 
-كل الملفات في جذر واحد بلا مجلدات.
+لا يوجد بناء ولا Node ولا خادم. كل الملفات في جذر واحد، وتعمل مباشرة على GitHub Pages.
 
-## التشغيل
-1. `npm install`
-2. انسخ `.env.example` إلى `.env` وأدخل مفاتيح Firebase
-3. Authentication: فعّل Email/Password و Google و **Anonymous**
-4. `npm run dev`
+## الإعداد (مرة واحدة، على الخطة المجانية Spark)
+1. أنشئ مشروعًا في Firebase، ثم أنشئ قاعدة **Firestore**.
+2. Authentication → Sign-in method: فعّل **Email/Password** و**Google** و**Anonymous**.
+3. Project settings → Your apps → Web: انسخ الإعدادات إلى `config.js`.
+4. Firestore → Rules: الصق محتوى `firestore.rules` ثم Publish.
+5. Authentication → Settings → Authorized domains: أضف `lo-oxll.github.io`.
 
-المسارات: `/` `/login?role=client|business` `/business` `/services` `/book?id=…` `/bookings` `/اسم-النشاط`
+## النشر على GitHub Pages
+ارفع كل الملفات إلى جذر المستودع، ثم Settings → Pages → Source: فرع `main` والمجلد `/ (root)`.
 
-## GitHub Pages
-1. `npm run deploy` (يبني بمسار `/Slotify/` ويدفع `dist` إلى فرع `gh-pages`)
-2. Settings → Pages → Source: فرع `gh-pages`
-3. Firebase → Authentication → Settings → Authorized domains: أضف `lo-oxll.github.io`
+## الصفحات
+`index.html` الرئيسية · `login.html?role=client|business` · `business.html` لوحة النشاط ·
+`services.html` تصفح الخدمات · `book.html?id=…` · `bookings.html` · `b.html?s=اسم-النشاط` صفحة النشاط العامة
 
-## النشر (خطة Blaze مطلوبة للدوال)
-1. `npm run build`
-2. `firebase deploy` (قواعد Firestore + الدوال + الاستضافة)
-3. ثبّت إضافة **Trigger Email from Firestore** (مجموعة `mail`) لإرسال الإشعارات والتذكيرات
-
-## الاختبارات
-`npm run test:rules`
-
-## اختياري
-- App Check: أضف `VITE_RECAPTCHA_SITE_KEY` ثم فعّل الإلزام من لوحة Firebase
-- راجع مجموعة `errors` في Firestore لأخطاء الواجهة
+## ما لا يعمل بدون خادم
+بريد التذكير والإشعارات، وحد الحجوزات المعلّقة، والتحقق من الوقت داخل ساعات العمل على الخادم.

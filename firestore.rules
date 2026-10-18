@@ -3,6 +3,11 @@ service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
     function roleOf(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
+    function mine(b) { return b.clientId == request.auth.uid || b.businessId == request.auth.uid; }
+    function seesContact(b) {
+      return b.clientId == request.auth.uid || (b.businessId == request.auth.uid && b.status == 'confirmed');
+    }
+    function busyOk(b) { return b.clientId == request.auth.uid && b.businessId == request.resource.data.businessId; }
 
     match /users/{uid} {
       allow read: if signedIn() && request.auth.uid == uid;
@@ -21,8 +26,7 @@ service cloud.firestore {
     match /slugs/{slug} {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid
-        && slug.matches('^[a-z0-9-]{3,30}$')
-        && !(slug in ['login', 'business', 'services', 'bookings', 'book', 'terms', 'privacy', 'api']);
+        && slug.matches('^[a-z0-9-]{3,30}$');
       allow delete: if signedIn() && resource.data.uid == request.auth.uid;
     }
 
@@ -30,31 +34,55 @@ service cloud.firestore {
       allow read: if true;
       allow create: if signedIn() && request.resource.data.businessId == request.auth.uid
         && request.auth.token.email_verified == true
-        && roleOf(request.auth.uid) == 'business';
+        && roleOf(request.auth.uid) == 'business'
+        && request.resource.data.duration is number
+        && request.resource.data.duration >= 15 && request.resource.data.duration <= 180;
       allow update: if signedIn() && resource.data.businessId == request.auth.uid
         && request.resource.data.businessId == resource.data.businessId;
       allow delete: if signedIn() && resource.data.businessId == request.auth.uid;
     }
 
-    // الكتابة على الحجوزات وعلى busy تتم عبر Cloud Functions فقط
     match /bookings/{id} {
-      allow read: if signedIn()
-        && (resource.data.clientId == request.auth.uid || resource.data.businessId == request.auth.uid);
-      allow write: if false;
+      allow read: if signedIn() && mine(resource.data);
+
+      // العميل ينشئ الحجز مع رقم هاتف صالح (وثيقة contact في نفس العملية)
+      allow create: if signedIn()
+        && request.resource.data.clientId == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client'
+        && get(/databases/$(database)/documents/services/$(request.resource.data.serviceId)).data.businessId == request.resource.data.businessId
+        && request.resource.data.status == (get(/databases/$(database)/documents/businesses/$(request.resource.data.businessId)).data.autoConfirm == true ? 'confirmed' : 'pending')
+        && getAfter(/databases/$(database)/documents/bookings/$(id)/contact/info).data.phone.matches('^\\+?[0-9]{8,15}$');
+
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && (
+          (resource.data.businessId == request.auth.uid && resource.data.status == 'pending'
+            && request.resource.data.status in ['confirmed', 'rejected'])
+          || (mine(resource.data) && resource.data.status in ['pending', 'confirmed']
+            && request.resource.data.status == 'cancelled')
+        );
+      allow delete: if false;
 
       // رقم العميل: يراه صاحب الحجز دائمًا، والنشاط بعد القبول فقط
       match /contact/{doc} {
-        allow read: if signedIn() && (
-          get(/databases/$(database)/documents/bookings/$(id)).data.clientId == request.auth.uid
-          || (get(/databases/$(database)/documents/bookings/$(id)).data.businessId == request.auth.uid
-              && get(/databases/$(database)/documents/bookings/$(id)).data.status == 'confirmed'));
-        allow write: if false;
+        allow read: if signedIn() && seesContact(get(/databases/$(database)/documents/bookings/$(id)).data);
+        allow create: if signedIn()
+          && getAfter(/databases/$(database)/documents/bookings/$(id)).data.clientId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['name', 'phone', 'email'])
+          && request.resource.data.phone.matches('^\\+?[0-9]{8,15}$');
+        allow update, delete: if false;
       }
     }
 
+    // حجز الأوقات: مفتاح الوثيقة = businessId_staffId_date_time (يمنع التعارض)
     match /busy/{id} {
       allow read: if true;
-      allow write: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['businessId', 'staffId', 'date', 'time', 'bookingId'])
+        && id == request.resource.data.businessId + '_' + request.resource.data.staffId + '_' + request.resource.data.date + '_' + request.resource.data.time
+        && busyOk(getAfter(/databases/$(database)/documents/bookings/$(request.resource.data.bookingId)).data);
+      allow delete: if signedIn() && mine(get(/databases/$(database)/documents/bookings/$(resource.data.bookingId)).data);
+      allow update: if false;
     }
 
     match /errors/{id} {
