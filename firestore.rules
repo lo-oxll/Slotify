@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function roleOf(uid) { return get(/databases/$(database)/documents/users/$(uid)).data.role; }
+
+    match /users/{uid} {
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role in ['client', 'business']
+        && request.resource.data.phone is string;
+      allow update: if signedIn() && request.auth.uid == uid
+        && request.resource.data.role == resource.data.role;
+    }
+
+    match /businesses/{uid} {
+      allow read: if true;
+      allow write: if signedIn() && request.auth.uid == uid && roleOf(uid) == 'business';
+    }
+
+    match /slugs/{slug} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid
+        && slug.matches('^[a-z0-9-]{3,30}$')
+        && !(slug in ['login', 'business', 'services', 'bookings', 'book', 'terms', 'privacy', 'api']);
+      allow delete: if signedIn() && resource.data.uid == request.auth.uid;
+    }
+
+    match /services/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.businessId == request.auth.uid
+        && request.auth.token.email_verified == true
+        && roleOf(request.auth.uid) == 'business';
+      allow update: if signedIn() && resource.data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if signedIn() && resource.data.businessId == request.auth.uid;
+    }
+
+    // الكتابة على الحجوزات وعلى busy تتم عبر Cloud Functions فقط
+    match /bookings/{id} {
+      allow read: if signedIn()
+        && (resource.data.clientId == request.auth.uid || resource.data.businessId == request.auth.uid);
+      allow write: if false;
+
+      // رقم العميل: يراه صاحب الحجز دائمًا، والنشاط بعد القبول فقط
+      match /contact/{doc} {
+        allow read: if signedIn() && (
+          get(/databases/$(database)/documents/bookings/$(id)).data.clientId == request.auth.uid
+          || (get(/databases/$(database)/documents/bookings/$(id)).data.businessId == request.auth.uid
+              && get(/databases/$(database)/documents/bookings/$(id)).data.status == 'confirmed'));
+        allow write: if false;
+      }
+    }
+
+    match /busy/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    match /errors/{id} {
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['msg', 'stack', 'url', 'ts'])
+        && request.resource.data.msg is string && request.resource.data.msg.size() <= 500
+        && request.resource.data.stack is string && request.resource.data.stack.size() <= 1500;
+    }
+  }
+}

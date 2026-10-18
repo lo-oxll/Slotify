@@ -1,0 +1,14 @@
+{
+  "firestore": { "rules": "firestore.rules", "indexes": "firestore.indexes.json" },
+  "functions": [{
+    "source": ".",
+    "codebase": "default",
+    "ignore": ["node_modules", "dist", ".git", "*.jsx", "*.css", "index.html", "rules.test.js", "vite.config.js", "tailwind.config.js", "postcss.config.js", ".env.local", "firebase-debug.log"]
+  }],
+  "hosting": {
+    "public": "dist",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "rewrites": [{ "source": "**", "destination": "/index.html" }]
+  },
+  "emulators": { "firestore": { "port": 8080 }, "ui": { "enabled": false } }
+}

@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer components {
+  .btn { @apply inline-flex items-center justify-center rounded-lg bg-teal px-5 py-2.5 font-medium text-white transition hover:bg-teal-dark disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal; }
+  .btn-alt { @apply inline-flex items-center justify-center rounded-lg border border-line bg-white px-4 py-2 text-sm font-medium text-ink transition hover:border-teal; }
+  .btn-danger { @apply inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-medium text-coral transition hover:bg-coral/10; }
+  .input { @apply w-full rounded-lg border border-line bg-white px-3 py-2.5 text-ink outline-none focus:border-teal focus:ring-2 focus:ring-teal/20; }
+  .card { @apply rounded-xl border border-line bg-white p-5; }
+  .label { @apply mb-1 block text-sm text-ink/70; }
+}
+
+@layer base {
+  body { font-family: "IBM Plex Sans Arabic", system-ui, sans-serif; }
+}
