@@ -1,4 +1,4 @@
-import { auth, db, onAuthStateChanged, signOut, doc, getDoc, writeBatch, addDoc, collection } from "./firebase.js";
+import { isDemo, auth, db, onAuthStateChanged, signOut, doc, getDoc, writeBatch, addDoc, collection } from "./firebase.js";
 import { blocksOf, busyDocId } from "./slots.js";
 
 export * from "./slots.js";
@@ -55,6 +55,14 @@ export async function setBookingStatus(b, status) {
     blocksOf(b.time, b.duration).forEach((t) => batch.delete(doc(db, "busy", busyDocId(b.businessId, b.staffId, b.date, t))));
   await batch.commit();
 }
+
+if (isDemo)
+  document.body.insertAdjacentHTML("afterbegin",
+    '<div class="demo">وضع تجريبي: البيانات محفوظة في هذا المتصفح فقط. لربط قاعدة بيانات حقيقية عبّئ <b>config.js</b>. <a href="#" id="demo-reset">إعادة ضبط</a></div>');
+$("#demo-reset")?.addEventListener("click", (e) => {
+  e.preventDefault();
+  if (confirm("حذف كل البيانات التجريبية؟")) { Object.keys(localStorage).filter((k) => k.startsWith("waqti_demo")).forEach((k) => localStorage.removeItem(k)); location.href = "index.html"; }
+});
 
 // تسجيل أخطاء الواجهة في مجموعة errors (للمسجّلين فقط)
 let sent = 0;

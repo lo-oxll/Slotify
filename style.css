@@ -57,3 +57,4 @@ a.card{display:block;transition:.15s}a.card:hover{border-color:var(--teal)}
 .door.light{background:#fff;color:var(--ink)}.door.dark{background:var(--teal);color:#fff}
 @media(min-width:768px){.doors .pair{flex-direction:row}.door{padding:3.5rem}.door h2{font-size:3rem}}
 .prose{max-width:42rem;line-height:2}.prose p{margin:1rem 0}
+.demo{background:#FFF4D6;color:#5C4400;font-size:.8rem;text-align:center;padding:.4rem 1rem;border-bottom:1px solid #F0DDA0}.demo a{text-decoration:underline}

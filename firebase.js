@@ -1,11 +1,36 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
-import { getAuth } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-import { getFirestore } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+// يختار الواجهة الخلفية تلقائيًا: Firebase الحقيقي إن وُجدت الإعدادات في config.js، وإلا الوضع التجريبي المحلي
 import { firebaseConfig } from "./config.js";
 
-export * from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
-export * from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+export const isDemo = !(firebaseConfig.apiKey && firebaseConfig.projectId);
+const m = await import(isDemo ? "./fb-local.js" : "./fb-real.js");
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const {
+  EmailAuthProvider,
+  GoogleAuthProvider,
+  addDoc,
+  auth,
+  collection,
+  createUserWithEmailAndPassword,
+  db,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  linkWithCredential,
+  linkWithPopup,
+  onAuthStateChanged,
+  onSnapshot,
+  query,
+  runTransaction,
+  sendEmailVerification,
+  serverTimestamp,
+  setDoc,
+  signInAnonymously,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  startAfter,
+  where,
+  writeBatch
+} = m;
