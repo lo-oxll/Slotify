@@ -85,6 +85,46 @@ service cloud.firestore {
       allow update: if false;
     }
 
+    // السيرة الذاتية: صاحبها يقرأ ويكتب، والشركات تقرأ السير الظاهرة فقط
+    match /cvs/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid
+        || (resource.data.open == true && roleOf(request.auth.uid) == 'business'));
+      allow create, update: if signedIn() && request.auth.uid == uid && roleOf(uid) == 'client'
+        && request.resource.data.uid == uid
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.title is string && request.resource.data.title.size() <= 80
+        && request.resource.data.summary is string && request.resource.data.summary.size() <= 1000
+        && request.resource.data.skills is list && request.resource.data.skills.size() <= 30;
+      allow delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    match /jobs/{id} {
+      allow read: if true;
+      allow create: if signedIn() && request.resource.data.businessId == request.auth.uid
+        && request.auth.token.email_verified == true
+        && roleOf(request.auth.uid) == 'business'
+        && request.resource.data.skills is list && request.resource.data.skills.size() <= 30;
+      allow update: if signedIn() && resource.data.businessId == request.auth.uid
+        && request.resource.data.businessId == resource.data.businessId;
+      allow delete: if signedIn() && resource.data.businessId == request.auth.uid;
+    }
+
+    // التقديم: مفتاح الوثيقة = jobId_candidateId (يمنع التقديم المكرر). بيانات التواصل تُنسخ هنا فقط.
+    match /applications/{id} {
+      allow read: if signedIn()
+        && (resource.data.candidateId == request.auth.uid || resource.data.businessId == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.candidateId == request.auth.uid
+        && roleOf(request.auth.uid) == 'client'
+        && id == request.resource.data.jobId + '_' + request.auth.uid
+        && get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.businessId == request.resource.data.businessId
+        && get(/databases/$(database)/documents/jobs/$(request.resource.data.jobId)).data.active == true
+        && request.resource.data.status == 'new';
+      allow update: if signedIn() && resource.data.businessId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && request.resource.data.status in ['new', 'shortlisted', 'rejected'];
+      allow delete: if signedIn() && resource.data.candidateId == request.auth.uid;
+    }
+
     match /errors/{id} {
       allow create: if signedIn()
         && request.resource.data.keys().hasOnly(['msg', 'stack', 'url', 'ts'])

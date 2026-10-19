@@ -56,7 +56,11 @@ async function main() {
     }
     return true;
   };
-  const enter = () => { location.href = HOME[role]; };
+  const enter = async () => {
+    let dest = HOME[role];
+    if (role === "client" && !(await getDoc(doc(db, "cvs", auth.currentUser.uid))).exists()) dest = "cv.html";
+    location.href = dest;
+  };
   const run = async (fn) => {
     setErr(""); setBusy(true);
     try { await fn(); } catch (x) { setErr(ERR[x.code] ?? x.message); }

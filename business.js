@@ -1,8 +1,11 @@
 import {
   auth, db, collection, doc, getDoc, getDocs, addDoc, deleteDoc, onSnapshot, query, where,
-  runTransaction, writeBatch, sendEmailVerification,
+  runTransaction, writeBatch, sendEmailVerification, limit,
 } from "./firebase.js";
-import { $, esc, guard, CATEGORIES, STATUS, WEEKDAYS, gcalLink, setBookingStatus } from "./common.js";
+import {
+  $, esc, guard, CATEGORIES, STATUS, WEEKDAYS, gcalLink, setBookingStatus,
+  EDU, JOB_TYPES, RECOMMEND, parseSkills, rankCandidates,
+} from "./common.js";
 
 const S = await guard("business");
 if (S) await main();
@@ -42,7 +45,7 @@ async function main() {
   /* ---------- التبويبات ---------- */
   const pending = () => list.filter((b) => b.status === "pending").length;
   function renderTabs() {
-    const tabs = { bookings: `الحجوزات${pending() ? ` (${pending()})` : ""}`, services: "الخدمات", profile: "الملف", stats: "الإحصائيات" };
+    const tabs = { bookings: `الحجوزات${pending() ? ` (${pending()})` : ""}`, services: "الخدمات", jobs: `الوظائف${newApps() ? ` (${newApps()})` : ""}`, profile: "الملف", stats: "الإحصائيات" };
     $("#tabs").innerHTML = Object.entries(tabs).map(([k, v]) =>
       `<button class="tab" role="tab" aria-selected="${tab === k}" data-tab="${k}">${v}</button>`).join("");
     document.title = pending() ? `(${pending()}) وقتي` : "وقتي";
@@ -51,7 +54,9 @@ async function main() {
     const t = e.target.closest("[data-tab]");
     if (!t) return;
     tab = t.dataset.tab; msg = ""; svcMsg = "";
+    jobView = null;
     if (tab === "services") await loadServices();
+    if (tab === "jobs") await loadJobs();
     renderTabs(); renderPanel();
   });
 
@@ -210,13 +215,123 @@ async function main() {
     </div>`;
   }
 
+  /* ---------- الوظائف والترشيح التلقائي ---------- */
+  let jobs = [], apps = [], jobView = null, jobMsg = "", cvCache = null;
+  const newApps = () => apps.filter((a) => a.status === "new").length;
+  async function loadJobs() {
+    const s = await getDocs(query(collection(db, "jobs"), where("businessId", "==", uid)));
+    jobs = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+  const skillTags = (arr, cls = "ok") => arr.map((s) => `<span class="tag ${cls}">${esc(s)}</span>`).join("");
+  const scoreCls = (n) => (n >= 70 ? "s-high" : n >= 45 ? "s-mid" : "s-low");
+
+  function candidatesHTML(job) {
+    if (!cvCache) return `<p class="muted">جارٍ تحليل السير الذاتية…</p>`;
+    const rows = rankCandidates(job, cvCache).filter((r) => r.score >= RECOMMEND).slice(0, 30);
+    if (!rows.length) return `<p class="muted">لا يوجد مرشحون مطابقون حاليًا. جرّب تخفيف المتطلبات أو أضف مهارات بديلة.</p>`;
+    return `<div class="stack">${rows.map((r) => `
+      <div class="card stack">
+        <div class="row between">
+          <div><p class="title">${esc(r.cv.name)} — ${esc(r.cv.title)}</p>
+            <p class="small muted">${esc(r.cv.city)} · خبرة ${esc(r.cv.years)} سنوات · ${esc(r.cv.education)}${r.cv.salary ? ` · ${esc(r.cv.salary)}` : ""}</p></div>
+          <span class="score ${scoreCls(r.score)}">${r.score}%</span>
+        </div>
+        <div class="row">${skillTags(r.matched.map((s) => "✓ " + s))}${skillTags(r.missing, "miss")}</div>
+        ${r.cv.summary ? `<p class="small">${esc(r.cv.summary.slice(0, 180))}${r.cv.summary.length > 180 ? "…" : ""}</p>` : ""}
+        ${r.cv.contact ? `<p class="small teal">للتواصل: <span dir="ltr">${esc(r.cv.contact)}</span></p>` : `<p class="small muted">بيانات التواصل تظهر عند تقديمه على وظيفتك.</p>`}
+      </div>`).join("")}</div>`;
+  }
+  function applicantsHTML(job) {
+    const rows = apps.filter((a) => a.jobId === job.id).sort((a, b) => b.score - a.score);
+    if (!rows.length) return `<p class="muted">لا توجد طلبات تقديم لهذه الوظيفة بعد.</p>`;
+    return `<div class="stack">${rows.map((a) => `
+      <div class="card stack">
+        <div class="row between">
+          <div><p class="title">${esc(a.name)} — ${esc(a.cvTitle)}</p>
+            <div class="row small"><a class="teal" dir="ltr" href="tel:${esc(a.phone)}">${esc(a.phone)}</a>
+              <a class="teal" target="_blank" rel="noopener" href="https://wa.me/${esc(String(a.phone).replace(/^\+/, ""))}">واتساب</a>
+              ${a.email ? `<a class="teal" dir="ltr" href="mailto:${esc(a.email)}">${esc(a.email)}</a>` : ""}</div></div>
+          <div class="row"><span class="score ${scoreCls(a.score)}">${esc(a.score)}%</span>
+            <select class="input" style="width:auto" data-status="${esc(a.id)}" aria-label="حالة الطلب">
+              ${[["new", "جديد"], ["shortlisted", "مرشّح"], ["rejected", "مرفوض"]].map(([k, v]) => `<option value="${k}" ${a.status === k ? "selected" : ""}>${v}</option>`).join("")}
+            </select></div>
+        </div>
+      </div>`).join("")}</div>`;
+  }
+  function jobsHTML() {
+    const ok = auth.currentUser.emailVerified;
+    const job = jobView && jobs.find((j) => j.id === jobView.id);
+    const view = job ? `
+      <div class="card hl stack">
+        <div class="row between"><p class="title">${jobView.mode === "cand" ? "المرشحون المقترحون" : "المتقدمون"} — ${esc(job.title)}</p>
+          <button class="btn-alt" data-act="job-close">إغلاق</button></div>
+        ${jobView.mode === "cand" ? candidatesHTML(job) : applicantsHTML(job)}
+      </div>` : "";
+    return `<div class="stack">
+      ${view}
+      <div class="card grid g3">
+        <div><label class="label">المسمى الوظيفي</label><input class="input" id="j-title" maxlength="80"></div>
+        <div><label class="label">نوع الدوام</label><select class="input" id="j-type">${JOB_TYPES.map((t) => `<option>${esc(t)}</option>`).join("")}</select></div>
+        <div><label class="label">المدينة</label><input class="input" id="j-city" maxlength="60" value="${esc(biz.city)}"></div>
+        <div><label class="label">الحد الأدنى للخبرة (سنوات)</label><input class="input" type="number" min="0" max="40" value="0" id="j-years"></div>
+        <div><label class="label">المؤهل الأدنى</label><select class="input" id="j-edu">${EDU.map((t) => `<option>${esc(t)}</option>`).join("")}</select></div>
+        <div><label class="label">الراتب (اختياري)</label><input class="input" id="j-salary" maxlength="40"></div>
+        <div class="span"><label class="label">المهارات المطلوبة (افصل بينها بفاصلة)</label><input class="input" id="j-skills" placeholder="مثال: React, JavaScript, خدمة العملاء"></div>
+        <div class="span"><label class="label">وصف الوظيفة</label><textarea class="input" rows="3" id="j-desc" maxlength="1000"></textarea></div>
+        <p class="err span" role="alert">${esc(jobMsg)}</p>
+        <div class="span"><button class="btn" data-act="add-job" ${ok ? "" : "disabled"}>نشر الوظيفة</button></div>
+      </div>
+      ${jobs.length ? "" : `<p class="muted">لم تنشر أي وظيفة بعد. انشر وظيفتك الأولى ليرشّح لك النظام أفضل المتقدمين تلقائيًا.</p>`}
+      ${jobs.map((j) => {
+        const n = apps.filter((a) => a.jobId === j.id).length;
+        return `<div class="card stack">
+          <div class="row between"><div><p class="title">${esc(j.title)} ${j.active ? "" : '<span class="small muted">(موقوفة)</span>'}</p>
+            <p class="small muted">${esc(j.type)} · ${esc(j.city)} · خبرة ${esc(j.minYears)}+ · ${esc(j.education)}${j.salary ? ` · ${esc(j.salary)}` : ""}</p></div></div>
+          <div class="row">${skillTags(j.skills)}</div>
+          <div class="row">
+            <button class="btn" data-act="job-cand" data-id="${esc(j.id)}">المرشحون المقترحون</button>
+            <button class="btn-alt" data-act="job-app" data-id="${esc(j.id)}">المتقدمون (${n})</button>
+            <button class="btn-alt" data-act="job-toggle" data-id="${esc(j.id)}">${j.active ? "إيقاف" : "تفعيل"}</button>
+            <button class="btn-danger" data-act="job-del" data-id="${esc(j.id)}">حذف</button>
+          </div></div>`;
+      }).join("")}
+    </div>`;
+  }
+  async function addJob() {
+    jobMsg = "";
+    const title = $("#j-title").value.trim(), skills = parseSkills($("#j-skills").value);
+    if (title.length < 2 || !skills.length) { jobMsg = "أدخل المسمى الوظيفي ومهارة واحدة على الأقل"; return renderPanel(); }
+    try {
+      await addDoc(collection(db, "jobs"), {
+        businessId: uid, businessName: biz.name, title, type: $("#j-type").value, city: $("#j-city").value.trim() || biz.city,
+        minYears: Math.max(0, Math.min(40, +$("#j-years").value || 0)), education: $("#j-edu").value,
+        salary: $("#j-salary").value.trim(), skills, description: $("#j-desc").value.trim(), active: true, createdAt: Date.now(),
+      });
+      await loadJobs();
+    } catch { jobMsg = "تعذّر نشر الوظيفة. تأكد من تفعيل بريدك الإلكتروني."; }
+    renderPanel();
+  }
+  async function openCandidates(id) {
+    jobView = { mode: "cand", id }; renderPanel();
+    if (!cvCache) {
+      const s = await getDocs(query(collection(db, "cvs"), where("open", "==", true), limit(300)));
+      cvCache = s.docs.map((d) => d.data());
+      renderPanel();
+    }
+  }
+
   /* ---------- العرض والأحداث ---------- */
   function renderPanel() {
-    $("#panel").innerHTML = { bookings: bookingsHTML, services: servicesHTML, profile: profileHTML, stats: statsHTML }[tab]();
+    $("#panel").innerHTML = { bookings: bookingsHTML, services: servicesHTML, jobs: jobsHTML, profile: profileHTML, stats: statsHTML }[tab]();
     if (tab === "profile") drawQR();
   }
 
-  $("#panel").addEventListener("change", (e) => {
+  $("#panel").addEventListener("change", async (e) => {
+    if (e.target.dataset.status !== undefined) {
+      try { await writeBatch(db).update(doc(db, "applications", e.target.dataset.status), { status: e.target.value }).commit(); }
+      catch { alert("تعذّر تحديث الحالة"); }
+      return;
+    }
     const i = e.target.dataset.day;
     if (i === undefined) return;
     const n = +i;
@@ -249,6 +364,17 @@ async function main() {
         if (n) biz.staff = [...biz.staff, { id: "s" + Date.now().toString(36), name: n }];
         renderPanel();
       } else if (act === "del-staff") { syncProfile(); biz.staff = biz.staff.filter((x) => x.id !== id); renderPanel(); }
+      else if (act === "add-job") await addJob();
+      else if (act === "job-cand") await openCandidates(id);
+      else if (act === "job-app") { jobView = { mode: "app", id }; renderPanel(); }
+      else if (act === "job-close") { jobView = null; renderPanel(); }
+      else if (act === "job-toggle") {
+        const j = jobs.find((x) => x.id === id);
+        await writeBatch(db).update(doc(db, "jobs", id), { active: !j.active }).commit();
+        await loadJobs(); renderPanel();
+      } else if (act === "job-del") {
+        if (confirm("حذف الوظيفة؟")) { await deleteDoc(doc(db, "jobs", id)); jobView = null; await loadJobs(); renderPanel(); }
+      }
     } catch { alert("تعذّر تنفيذ الإجراء"); el.disabled = false; }
   });
 
@@ -264,6 +390,12 @@ async function main() {
     list = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
     renderTabs();
     if (tab === "bookings" || tab === "stats") renderPanel();
+  });
+
+  onSnapshot(query(collection(db, "applications"), where("businessId", "==", uid)), (s) => {
+    apps = s.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderTabs();
+    if (tab === "jobs" && jobView?.mode === "app") renderPanel();
   });
 
   renderTop(); renderTabs(); renderPanel();

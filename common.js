@@ -2,6 +2,7 @@ import { isDemo, auth, db, onAuthStateChanged, signOut, doc, getDoc, writeBatch,
 import { blocksOf, busyDocId } from "./slots.js";
 
 export * from "./slots.js";
+export * from "./match.js";
 export const CATEGORIES = ["صالون", "عيادة", "ورشة", "تعليم خصوصي", "أخرى"];
 export const STATUS = { pending: "قيد الانتظار", confirmed: "مؤكد", rejected: "مرفوض", cancelled: "ملغي" };
 export const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
@@ -28,7 +29,7 @@ export function renderHeader({ user, profile }) {
   const role = profile?.role;
   const links =
     role === "business" ? [["business.html", "لوحة النشاط"]]
-    : role === "client" ? [["services.html", "الخدمات"], ["bookings.html", "حجوزاتي"]]
+    : role === "client" ? [["services.html", "الخدمات"], ["bookings.html", "حجوزاتي"], ["jobs.html", "الوظائف"], ["cv.html", "سيرتي"]]
     : [["services.html", "الخدمات"], ["login.html?role=client", "دخول العملاء"], ["login.html?role=business", "للأنشطة"]];
   $("#hdr").innerHTML = `<div class="wrap bar"><a href="index.html" class="logo">وقتي</a><nav>${links
     .map(([h, t]) => `<a href="${h}">${t}</a>`).join("")}${user ? '<button class="btn-alt" id="logout">خروج</button>' : ""}</nav></div>`;

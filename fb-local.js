@@ -110,6 +110,18 @@ if (localStorage.getItem(DB) === null) {
   }));
 }
 
+if (!localStorage.getItem("waqti_demo_jobs_seed")) {
+  const d = read(DB);
+  if (!d["jobs/demo-job"])
+    d["jobs/demo-job"] = {
+      businessId: "demo-business", businessName: "صالون تجريبي", title: "مصفف شعر", city: "الرياض", type: "دوام كامل",
+      minYears: 1, education: "ثانوي", salary: "4000", skills: ["قص الشعر", "صبغ", "تجميل", "خدمة العملاء"],
+      description: "نبحث عن مصفف شعر محترف للانضمام إلى فريقنا.", active: true, createdAt: Date.now(),
+    };
+  localStorage.setItem(DB, JSON.stringify(d));
+  localStorage.setItem("waqti_demo_jobs_seed", "1");
+}
+
 /* ---------------- Auth ---------------- */
 const users = () => read(USERS);
 const saveUsers = (u) => localStorage.setItem(USERS, JSON.stringify(u));

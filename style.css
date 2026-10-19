@@ -58,3 +58,7 @@ a.card{display:block;transition:.15s}a.card:hover{border-color:var(--teal)}
 @media(min-width:768px){.doors .pair{flex-direction:row}.door{padding:3.5rem}.door h2{font-size:3rem}}
 .prose{max-width:42rem;line-height:2}.prose p{margin:1rem 0}
 .demo{background:#FFF4D6;color:#5C4400;font-size:.8rem;text-align:center;padding:.4rem 1rem;border-bottom:1px solid #F0DDA0}.demo a{text-decoration:underline}
+textarea.input{resize:vertical}
+.score{display:inline-block;border-radius:999px;padding:.1rem .75rem;font-weight:700;font-size:.9rem}
+.s-high{background:#D9F0EE;color:var(--teal-d)}.s-mid{background:#FFF0CC;color:#7A5A00}.s-low{background:#ECECEC;color:#555}
+.tag.ok{background:#D9F0EE;color:var(--teal-d);cursor:default}.tag.miss{background:#F7E3DD;color:#8A3A22;cursor:default}
