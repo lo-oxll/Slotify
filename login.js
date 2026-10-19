@@ -2,7 +2,7 @@ import {
   auth, db, GoogleAuthProvider, createUserWithEmailAndPassword, signInWithEmailAndPassword,
   signInWithPopup, sendEmailVerification, signOut, doc, getDoc, setDoc,
 } from "./firebase.js";
-import { $, esc, CATEGORIES, HOME, PHONE_RE, cleanPhone, renderHeader, session } from "./common.js";
+import { $, esc, CATEGORIES, HOME, PHONE_RE, cleanPhone, renderHeader, session, safeNext } from "./common.js";
 
 const ERR = {
   "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة",
@@ -12,7 +12,9 @@ const ERR = {
   "auth/popup-closed-by-user": "",
 };
 
-const role = new URLSearchParams(location.search).get("role");
+const qs = new URLSearchParams(location.search);
+const role = qs.get("role");
+const next = safeNext(qs.get("next"));
 const app = $("#app");
 
 async function main() {
@@ -24,7 +26,7 @@ async function main() {
   const s = await session();
   renderHeader({ user: null, profile: null });
   if (s.user && !s.user.isAnonymous) {
-    if (s.profile) return location.replace(HOME[s.profile.role]);
+    if (s.profile) return location.replace(next && s.profile.role === role ? next : HOME[s.profile.role]);
     step = "complete"; f.name = s.user.displayName || "";
   }
 
@@ -57,8 +59,9 @@ async function main() {
     return true;
   };
   const enter = async () => {
-    let dest = HOME[role];
-    if (role === "client" && !(await getDoc(doc(db, "cvs", auth.currentUser.uid))).exists()) dest = "cv.html";
+    let dest = next || HOME[role];
+    if (role === "client" && !(await getDoc(doc(db, "cvs", auth.currentUser.uid))).exists())
+      dest = "cv.html" + (next ? `?next=${encodeURIComponent(next)}` : "");
     location.href = dest;
   };
   const run = async (fn) => {

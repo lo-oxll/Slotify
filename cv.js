@@ -1,5 +1,5 @@
 import { db, doc, getDoc, setDoc, deleteDoc, serverTimestamp } from "./firebase.js";
-import { $, esc, guard, EDU, JOB_TYPES, parseSkills } from "./common.js";
+import { $, esc, guard, EDU, JOB_TYPES, parseSkills, cvCompleteness, safeNext } from "./common.js";
 
 const S = await guard("client");
 if (S) await main();
@@ -50,8 +50,7 @@ async function main() {
   const paint = () => {
     const c = read();
     $("#chips").innerHTML = c.skills.map((s) => `<span class="tag ok">${esc(s)}</span>`).join("");
-    const parts = [c.name, c.title, c.city, c.skills.length, c.summary.length > 20, c.years > 0, c.languages];
-    $("#pct").textContent = Math.round((parts.filter(Boolean).length / parts.length) * 100) + "%";
+    $("#pct").textContent = cvCompleteness(c) + "%";
   };
   app.addEventListener("input", paint);
   paint();
@@ -65,6 +64,8 @@ async function main() {
     }
     try {
       await setDoc(doc(db, "cvs", uid), { ...c, updatedAt: serverTimestamp() });
+      const next = safeNext(new URLSearchParams(location.search).get("next"));
+      if (next) return (location.href = next);
       $("#ok").innerHTML = 'تم الحفظ — <a class="teal" href="jobs.html">شاهد الوظائف المناسبة لك</a>';
     } catch { $("#err").textContent = "تعذّر الحفظ، حاول مرة أخرى"; }
   });

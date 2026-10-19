@@ -1,4 +1,4 @@
-import { isDemo, auth, db, onAuthStateChanged, signOut, doc, getDoc, writeBatch, addDoc, collection } from "./firebase.js";
+import { isDemo, auth, db, onAuthStateChanged, signOut, doc, getDoc, setDoc, writeBatch, addDoc, collection } from "./firebase.js";
 import { blocksOf, busyDocId } from "./slots.js";
 
 export * from "./slots.js";
@@ -6,7 +6,11 @@ export * from "./match.js";
 export const CATEGORIES = ["صالون", "عيادة", "ورشة", "تعليم خصوصي", "أخرى"];
 export const STATUS = { pending: "قيد الانتظار", confirmed: "مؤكد", rejected: "مرفوض", cancelled: "ملغي" };
 export const WEEKDAYS = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"];
-export const HOME = { business: "business.html", client: "services.html" };
+export const HOME = { business: "business.html", client: "home.html" };
+
+// مسار داخلي آمن فقط للعودة بعد الدخول
+export const safeNext = (n) => (/^[A-Za-z0-9_-]+\.html(\?[A-Za-z0-9_=&%.-]*)?$/.test(n || "") ? n : null);
+const here = () => location.pathname.split("/").pop() + location.search;
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -29,8 +33,8 @@ export function renderHeader({ user, profile }) {
   const role = profile?.role;
   const links =
     role === "business" ? [["business.html", "لوحة النشاط"]]
-    : role === "client" ? [["services.html", "الخدمات"], ["bookings.html", "حجوزاتي"], ["jobs.html", "الوظائف"], ["cv.html", "سيرتي"]]
-    : [["services.html", "الخدمات"], ["login.html?role=client", "دخول العملاء"], ["login.html?role=business", "للأنشطة"]];
+    : role === "client" ? [["home.html", "لوحتي"], ["services.html", "الخدمات"], ["jobs.html", "الوظائف"], ["bookings.html", "حجوزاتي"], ["cv.html", "سيرتي"]]
+    : [["services.html", "الخدمات"], ["jobs.html", "الوظائف"], ["login.html?role=client", "دخول الأفراد"], ["login.html?role=business", "للشركات والأنشطة"]];
   $("#hdr").innerHTML = `<div class="wrap bar"><a href="index.html" class="logo">وقتي</a><nav>${links
     .map(([h, t]) => `<a href="${h}">${t}</a>`).join("")}${user ? '<button class="btn-alt" id="logout">خروج</button>' : ""}</nav></div>`;
   $("#logout")?.addEventListener("click", async () => {
@@ -44,9 +48,20 @@ export function renderHeader({ user, profile }) {
 export async function guard(role) {
   const s = await session();
   renderHeader(s);
-  if (!s.user || !s.profile) { location.replace(`login.html?role=${role}`); return null; }
+  if (!s.user || !s.profile) { location.replace(`login.html?role=${role}&next=${encodeURIComponent(here())}`); return null; }
   if (s.profile.role !== role) { location.replace(HOME[s.profile.role]); return null; }
   return s;
+}
+
+// تقديم على وظيفة (مفتاح الوثيقة jobId_candidateId يمنع التكرار)
+export async function applyToJob(job, cv, { user, profile }, scoreValue) {
+  const data = {
+    jobId: job.id, jobTitle: job.title, businessId: job.businessId, businessName: job.businessName,
+    candidateId: user.uid, name: cv.name, phone: profile.phone, email: user.email || cv.contact || "",
+    cvTitle: cv.title, score: scoreValue, status: "new", createdAt: Date.now(),
+  };
+  await setDoc(doc(db, "applications", `${job.id}_${user.uid}`), data);
+  return data;
 }
 
 export async function setBookingStatus(b, status) {

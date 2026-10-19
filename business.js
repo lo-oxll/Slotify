@@ -16,7 +16,7 @@ async function main() {
   let biz = (await getDoc(doc(db, "businesses", uid))).data();
   const keep = () => ({ name: biz.name, city: biz.city, category: biz.category });
   let orig = keep(), savedSlug = biz.slug || "";
-  let tab = "bookings", list = [], services = [], contacts = {}, msg = "", svcMsg = "";
+  let tab = "overview", list = [], services = [], contacts = {}, msg = "", svcMsg = "";
 
   app.innerHTML = `<div id="verify"></div><div id="notif"></div><div class="tabs" id="tabs" role="tablist"></div><div id="panel"></div>`;
 
@@ -45,20 +45,18 @@ async function main() {
   /* ---------- التبويبات ---------- */
   const pending = () => list.filter((b) => b.status === "pending").length;
   function renderTabs() {
-    const tabs = { bookings: `الحجوزات${pending() ? ` (${pending()})` : ""}`, services: "الخدمات", jobs: `الوظائف${newApps() ? ` (${newApps()})` : ""}`, profile: "الملف", stats: "الإحصائيات" };
+    const tabs = { overview: "نظرة عامة", bookings: `الحجوزات${pending() ? ` (${pending()})` : ""}`, services: "الخدمات", jobs: `الوظائف${newApps() ? ` (${newApps()})` : ""}`, profile: "الملف" };
     $("#tabs").innerHTML = Object.entries(tabs).map(([k, v]) =>
       `<button class="tab" role="tab" aria-selected="${tab === k}" data-tab="${k}">${v}</button>`).join("");
     document.title = pending() ? `(${pending()}) وقتي` : "وقتي";
   }
-  $("#tabs").addEventListener("click", async (e) => {
-    const t = e.target.closest("[data-tab]");
-    if (!t) return;
-    tab = t.dataset.tab; msg = ""; svcMsg = "";
-    jobView = null;
+  async function switchTab(k) {
+    tab = k; msg = ""; svcMsg = ""; jobView = null;
     if (tab === "services") await loadServices();
     if (tab === "jobs") await loadJobs();
     renderTabs(); renderPanel();
-  });
+  }
+  $("#tabs").addEventListener("click", (e) => { const t = e.target.closest("[data-tab]"); if (t) switchTab(t.dataset.tab); });
 
   /* ---------- الحجوزات ---------- */
   function bookingsHTML() {
@@ -131,6 +129,8 @@ async function main() {
       <div><label class="label">بداية الاستراحة (اختياري)</label><input type="time" class="input" id="p-bfrom" value="${esc(br.from || "")}"></div>
       <div><label class="label">نهاية الاستراحة</label><input type="time" class="input" id="p-bto" value="${esc(br.to || "")}"></div>
 
+      <div class="span"><label class="label" for="p-about">نبذة عن النشاط (تظهر في صفحتك العامة)</label><textarea class="input" rows="3" maxlength="500" id="p-about">${esc(biz.about || "")}</textarea></div>
+
       <div class="span"><p class="label">أيام العمل</p><div class="row">${WEEKDAYS.map((d, i) =>
         `<label class="chip ${biz.workDays.includes(i) ? "on" : ""}"><input type="checkbox" data-day="${i}" ${biz.workDays.includes(i) ? "checked" : ""}>${d}</label>`).join("")}</div></div>
 
@@ -161,7 +161,7 @@ async function main() {
     Object.assign(biz, {
       name: v("p-name").trim(), category: v("p-category"), phone: v("p-phone").trim(), city: v("p-city").trim(),
       workHours: { from: v("p-from"), to: v("p-to") }, breakTime: { from: v("p-bfrom"), to: v("p-bto") },
-      autoConfirm: $("#p-auto").checked, slug: v("p-slug").trim().toLowerCase(),
+      about: v("p-about").trim(), autoConfirm: $("#p-auto").checked, slug: v("p-slug").trim().toLowerCase(),
     });
   }
   function drawQR() {
@@ -191,8 +191,10 @@ async function main() {
         const cur = keep();
         if (cur.name !== orig.name || cur.city !== orig.city || cur.category !== orig.category) {
           const s = await getDocs(query(collection(db, "services"), where("businessId", "==", uid)));
+          const jb = await getDocs(query(collection(db, "jobs"), where("businessId", "==", uid)));
           const batch = writeBatch(db);
           s.docs.forEach((d) => batch.update(d.ref, { businessName: biz.name, category: biz.category, city: biz.city }));
+          jb.docs.forEach((d) => batch.update(d.ref, { businessName: biz.name }));
           await batch.commit();
           orig = cur;
         }
@@ -291,6 +293,7 @@ async function main() {
           <div class="row">
             <button class="btn" data-act="job-cand" data-id="${esc(j.id)}">المرشحون المقترحون</button>
             <button class="btn-alt" data-act="job-app" data-id="${esc(j.id)}">المتقدمون (${n})</button>
+            <button class="btn-alt" data-act="job-link" data-id="${esc(j.id)}">نسخ رابط الوظيفة</button>
             <button class="btn-alt" data-act="job-toggle" data-id="${esc(j.id)}">${j.active ? "إيقاف" : "تفعيل"}</button>
             <button class="btn-danger" data-act="job-del" data-id="${esc(j.id)}">حذف</button>
           </div></div>`;
@@ -320,9 +323,41 @@ async function main() {
     }
   }
 
+  /* ---------- نظرة عامة ---------- */
+  function overviewHTML() {
+    const t = new Date().toLocaleDateString("sv-SE");
+    const pend = pending();
+    const todayN = list.filter((b) => b.date === t && b.status === "confirmed").length;
+    const upcoming = list.filter((b) => ["pending", "confirmed"].includes(b.status) && b.date >= t)
+      .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).slice(0, 5);
+    const recent = [...apps].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 5);
+    const todo = [
+      [auth.currentUser.emailVerified, "فعّل بريدك الإلكتروني", null],
+      [services.length > 0, "أضف أول خدمة للحجز", "services"],
+      [!!savedSlug, "فعّل رابط صفحتك العامة", "profile"],
+      [jobs.length > 0, "انشر وظيفة ليرشّح لك النظام الموظفين", "jobs"],
+    ];
+    const stat = (n, label, goto) => `<button class="card stat" data-goto="${goto}"><b>${n}</b><span class="small muted">${label}</span></button>`;
+    return `<div class="stack">
+      <div class="grid g4">
+        ${stat(pend, "حجوزات بانتظار ردك", "bookings")}${stat(todayN, "مواعيد اليوم المؤكدة", "bookings")}
+        ${stat(newApps(), "طلبات توظيف جديدة", "jobs")}${stat(jobs.filter((j) => j.active).length, "وظائف نشطة", "jobs")}
+      </div>
+      ${todo.every(([ok]) => ok) ? "" : `<div class="card stack"><p class="title">ابدأ من هنا</p>${todo.map(([ok, label, go]) =>
+        `<div class="row between"><span class="${ok ? "muted" : ""}">${ok ? "✓" : "○"} ${label}</span>${ok || !go ? "" : `<button class="btn-alt" data-goto="${go}">انتقل</button>`}</div>`).join("")}</div>`}
+      <div class="grid g2">
+        <div class="card stack"><p class="title">المواعيد القادمة</p>
+          ${upcoming.length ? upcoming.map((b) => `<div class="row between"><span>${esc(b.serviceName)} — ${esc(b.clientName)}</span><span class="small muted" dir="ltr">${esc(b.date)} ${esc(b.time)}</span></div>`).join("") : '<p class="small muted">لا توجد مواعيد قادمة.</p>'}</div>
+        <div class="card stack"><p class="title">آخر المتقدمين</p>
+          ${recent.length ? recent.map((a) => `<div class="row between"><span>${esc(a.name)} — ${esc(a.jobTitle)}</span><span class="score ${scoreCls(a.score)}">${esc(a.score)}%</span></div>`).join("") : '<p class="small muted">لا توجد طلبات بعد.</p>'}</div>
+      </div>
+      ${statsHTML()}
+    </div>`;
+  }
+
   /* ---------- العرض والأحداث ---------- */
   function renderPanel() {
-    $("#panel").innerHTML = { bookings: bookingsHTML, services: servicesHTML, jobs: jobsHTML, profile: profileHTML, stats: statsHTML }[tab]();
+    $("#panel").innerHTML = { overview: overviewHTML, bookings: bookingsHTML, services: servicesHTML, jobs: jobsHTML, profile: profileHTML }[tab]();
     if (tab === "profile") drawQR();
   }
 
@@ -340,6 +375,8 @@ async function main() {
   });
 
   $("#panel").addEventListener("click", async (e) => {
+    const go = e.target.closest("[data-goto]");
+    if (go) return switchTab(go.dataset.goto);
     const el = e.target.closest("[data-act]");
     if (!el) return;
     const { act, id, v } = el.dataset;
@@ -368,6 +405,7 @@ async function main() {
       else if (act === "job-cand") await openCandidates(id);
       else if (act === "job-app") { jobView = { mode: "app", id }; renderPanel(); }
       else if (act === "job-close") { jobView = null; renderPanel(); }
+      else if (act === "job-link") { await navigator.clipboard.writeText(new URL(`job.html?id=${id}`, location.href).href); el.textContent = "تم النسخ ✓"; }
       else if (act === "job-toggle") {
         const j = jobs.find((x) => x.id === id);
         await writeBatch(db).update(doc(db, "jobs", id), { active: !j.active }).commit();
@@ -389,14 +427,15 @@ async function main() {
     first = false;
     list = s.docs.map((d) => ({ id: d.id, ...d.data() })).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
     renderTabs();
-    if (tab === "bookings" || tab === "stats") renderPanel();
+    if (tab === "bookings" || tab === "overview") renderPanel();
   });
 
   onSnapshot(query(collection(db, "applications"), where("businessId", "==", uid)), (s) => {
     apps = s.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderTabs();
-    if (tab === "jobs" && jobView?.mode === "app") renderPanel();
+    if ((tab === "jobs" && jobView?.mode === "app") || tab === "overview") renderPanel();
   });
 
+  await Promise.all([loadServices(), loadJobs()]);
   renderTop(); renderTabs(); renderPanel();
 }

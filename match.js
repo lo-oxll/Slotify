@@ -43,3 +43,8 @@ export function score(job, cv) {
 }
 export const rankJobsFor = (cv, jobs) => jobs.map((job) => ({ job, ...score(job, cv) })).sort((a, b) => b.score - a.score);
 export const rankCandidates = (job, cvs) => cvs.map((cv) => ({ cv, ...score(job, cv) })).sort((a, b) => b.score - a.score);
+
+export const cvCompleteness = (c) => {
+  const p = [c.name, c.title, c.city, (c.skills || []).length, (c.summary || "").length > 20, c.years > 0, c.languages];
+  return Math.round((p.filter(Boolean).length / p.length) * 100);
+};
